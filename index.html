@@ -396,28 +396,28 @@
 </head>
 <body>
     <div class="container">
-        <!-- 新增：孕周信息卡片 -->
+        <!-- 孕周信息卡片 -->
         <div class="pregnancy-info">
             <div class="pregnancy-card">
                 <div class="pregnancy-title">当前孕周</div>
-                <div id="currentWeek" class="pregnancy-value">18周+6天</div>
-                <div id="pregnancyStage" class="pregnancy-details">孕中期</div>
+                <div id="currentWeek" class="pregnancy-value">计算中...</div>
+                <div id="pregnancyStage" class="pregnancy-details">计算中...</div>
             </div>
             
             <div class="pregnancy-card">
                 <div class="pregnancy-title">距离预产期</div>
-                <div id="daysToDue" class="pregnancy-value">148天</div>
+                <div id="daysToDue" class="pregnancy-value">计算中...</div>
                 <div class="pregnancy-details">2026年9月24日</div>
             </div>
             
             <div class="progress-container">
                 <div class="progress-label">
                     <span>孕早期 (0-13周)</span>
-                    <span id="progressPercent">47%</span>
+                    <span id="progressPercent">0%</span>
                     <span>孕晚期 (28-40周)</span>
                 </div>
                 <div class="progress-bar">
-                    <div id="progressFill" class="progress-fill" style="width: 47%"></div>
+                    <div id="progressFill" class="progress-fill" style="width: 0%"></div>
                 </div>
             </div>
         </div>
@@ -513,11 +513,9 @@
         let dailyChart, trendChart;
         let lastMovementTime = null;
         
-        // 孕周相关变量 - 根据您提供的信息修正
-        const dueDate = new Date('2026-09-24'); // 预产期
-        const currentDate = new Date('2026-04-29'); // 今天日期
-        const currentWeek = 18; // 当前周数
-        const currentDay = 6; // 当前天数
+        // 孕周相关常量
+        const DUE_DATE = new Date('2026-09-24'); // 预产期
+        const START_DATE = calculateStartDate(); // 根据孕周反推末次月经
         
         // 页面加载时初始化
         document.addEventListener('DOMContentLoaded', function() {
@@ -537,35 +535,89 @@
             if (movements.length === 0) {
                 addSampleData();
             }
+            
+            // 每分钟检查是否需要更新显示（用于跨天时自动重置）
+            setInterval(checkDateChange, 60000);
         });
         
-        // 新增：计算孕周信息
+        // 计算末次月经日期
+        function calculateStartDate() {
+            // 您提供的信息：今天（2026-04-29）是18周+6天
+            const currentDate = new Date('2026-04-29');
+            const weeks = 18;
+            const days = 6;
+            const totalDaysPregnant = (weeks * 7) + days;
+            
+            // 计算末次月经日期 = 当前日期 - 已怀孕天数
+            const startDate = new Date(currentDate);
+            startDate.setDate(startDate.getDate() - totalDaysPregnant);
+            return startDate;
+        }
+        
+        // 计算当前孕周
+        function calculateCurrentPregnancy() {
+            const today = new Date();
+            
+            // 计算已怀孕天数
+            const daysPregnant = Math.floor((today - START_DATE) / (1000 * 60 * 60 * 24));
+            
+            if (daysPregnant < 0) {
+                return { weeks: 0, days: 0 }; // 还未怀孕
+            }
+            
+            const weeks = Math.floor(daysPregnant / 7);
+            const days = daysPregnant % 7;
+            
+            return { weeks, days, totalDays: daysPregnant };
+        }
+        
+        // 新增：检查日期变化
+        function checkDateChange() {
+            // 每次检查时都重新计算孕周
+            updatePregnancyInfo();
+            
+            // 检查是否需要更新统计显示
+            updateStats();
+            updateCharts();
+            updateTimeGrid();
+        }
+        
+        // 更新孕周信息
         function updatePregnancyInfo() {
-            // 根据您的信息：今天是18周+6天
-            const weeks = currentWeek;
-            const days = currentDay;
+            const pregnancy = calculateCurrentPregnancy();
+            const today = new Date();
             
             // 计算距离预产期的天数
-            const daysToDue = Math.floor((dueDate - currentDate) / (1000 * 60 * 60 * 24));
+            const daysToDue = Math.floor((DUE_DATE - today) / (1000 * 60 * 60 * 24));
             
             // 计算孕程进度百分比
-            const totalDaysPregnant = (weeks * 7) + days; // 已怀孕天数
             const totalPregnancyDays = 280; // 标准孕期40周=280天
-            const progressPercent = Math.min(Math.floor((totalDaysPregnant / totalPregnancyDays) * 100), 100);
+            const progressPercent = Math.min(Math.floor((pregnancy.totalDays / totalPregnancyDays) * 100), 100);
             
             // 更新显示
-            document.getElementById('currentWeek').textContent = `${weeks}周+${days}天`;
+            if (pregnancy.weeks === 0 && pregnancy.days === 0) {
+                document.getElementById('currentWeek').textContent = '还未怀孕';
+            } else {
+                document.getElementById('currentWeek').textContent = `${pregnancy.weeks}周+${pregnancy.days}天`;
+            }
+            
             document.getElementById('daysToDue').textContent = `${daysToDue}天`;
             document.getElementById('progressPercent').textContent = `${progressPercent}%`;
             document.getElementById('progressFill').style.width = `${progressPercent}%`;
             
             // 根据孕周显示阶段
             let stage = '孕早期';
-            if (weeks >= 13 && weeks < 28) {
+            if (pregnancy.weeks >= 13 && pregnancy.weeks < 28) {
                 stage = '孕中期';
-            } else if (weeks >= 28) {
+            } else if (pregnancy.weeks >= 28) {
                 stage = '孕晚期';
             }
+            
+            // 如果超过预产期
+            if (daysToDue < 0) {
+                stage = '已过预产期';
+            }
+            
             document.getElementById('pregnancyStage').textContent = stage;
             
             // 如果今天是预产期
@@ -574,13 +626,21 @@
             } else if (daysToDue < 0) {
                 document.getElementById('daysToDue').textContent = `已过预产期 ${Math.abs(daysToDue)}天`;
             }
+            
+            return pregnancy;
         }
         
         // 加载存储的数据
         function loadMovements() {
             const stored = localStorage.getItem('fetalMovements');
             if (stored) {
-                movements = JSON.parse(stored);
+                try {
+                    movements = JSON.parse(stored);
+                } catch (e) {
+                    movements = [];
+                }
+            } else {
+                movements = [];
             }
         }
         
@@ -592,11 +652,13 @@
         // 记录胎动
         function recordMovement() {
             const now = new Date();
+            const todayStr = formatDate(now);
+            
             const movement = {
                 id: Date.now(),
-                date: now.toISOString().split('T')[0],
-                time: now.toTimeString().split(' ')[0].substring(0, 5), // HH:MM
-                fullTime: now.toTimeString().split(' ')[0], // HH:MM:SS
+                date: todayStr,
+                time: formatTime(now),
+                fullTime: now.toTimeString().split(' ')[0],
                 timestamp: now.getTime(),
                 hour: now.getHours(),
                 minute: now.getMinutes()
@@ -604,7 +666,6 @@
             
             // 计算与前一次的时间差（分钟）
             if (movements.length > 0 && lastMovementTime) {
-                const lastMove = movements[0];
                 const timeDiff = Math.round((now.getTime() - lastMovementTime) / 60000);
                 movement.timeSinceLast = timeDiff;
             } else {
@@ -636,6 +697,21 @@
             playBeepSound();
         }
         
+        // 格式化日期为YYYY-MM-DD
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+        
+        // 格式化时间为HH:MM
+        function formatTime(date) {
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${hours}:${minutes}`;
+        }
+        
         // 播放提示音
         function playBeepSound() {
             try {
@@ -659,10 +735,10 @@
             }
         }
         
-        // 更新统计信息
+        // 更新统计信息 - 修正：只统计当天的记录
         function updateStats() {
-            const today = new Date().toISOString().split('T')[0];
-            const todayMovements = movements.filter(m => m.date === today);
+            const todayStr = formatDate(new Date());
+            const todayMovements = movements.filter(m => m.date === todayStr);
             
             // 今日胎动次数
             document.getElementById('todayCount').textContent = todayMovements.length;
@@ -728,7 +804,7 @@
                     labels: getLast7DaysFormatted(),
                     datasets: [{
                         label: '胎动次数',
-                        data: [],
+                        data: getLast7DaysData(),
                         backgroundColor: 'rgba(156, 39, 176, 0.7)',
                         borderColor: 'rgba(156, 39, 176, 1)',
                         borderWidth: 1
@@ -756,7 +832,7 @@
                     labels: getLast14DaysFormatted(),
                     datasets: [{
                         label: '胎动次数',
-                        data: [],
+                        data: getLast14DaysData(),
                         borderColor: 'rgba(233, 30, 99, 1)',
                         backgroundColor: 'rgba(233, 30, 99, 0.1)',
                         borderWidth: 2,
@@ -778,73 +854,35 @@
                     }
                 }
             });
-            
-            updateCharts();
         }
         
         // 更新图表数据
         function updateCharts() {
-            updateDailyChart();
-            updateTrendChart();
-        }
-        
-        // 更新每日统计图
-        function updateDailyChart() {
-            const last7Days = getLast7Days();
-            const dailyCounts = [];
-            
-            last7Days.forEach(day => {
-                const count = movements.filter(m => m.date === day).length;
-                dailyCounts.push(count);
-            });
-            
-            dailyChart.data.datasets[0].data = dailyCounts;
-            dailyChart.update();
-        }
-        
-        // 更新趋势图
-        function updateTrendChart() {
-            const last14Days = getLast14Days();
-            const trendCounts = [];
-            
-            last14Days.forEach(day => {
-                const count = movements.filter(m => m.date === day).length;
-                trendCounts.push(count);
-            });
-            
-            trendChart.data.datasets[0].data = trendCounts;
-            trendChart.update();
-        }
-        
-        // 更新时间分布网格
-        function updateTimeGrid() {
-            const timeGrid = document.getElementById('timeGrid');
-            let html = '';
-            
-            // 创建24小时网格
-            for (let hour = 0; hour < 24; hour++) {
-                const hourLabel = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-                const today = new Date().toISOString().split('T')[0];
-                
-                // 统计这个小时的胎动次数
-                const hourCount = movements.filter(m => 
-                    m.date === today && m.hour === hour
-                ).length;
-                
-                const isActive = hourCount > 0;
-                const intensity = Math.min(hourCount * 0.2, 0.9);
-                
-                html += `
-                <div class="time-cell ${isActive ? 'active' : ''}" 
-                     style="${isActive ? `background-color: rgba(233, 30, 99, ${0.3 + intensity})` : ''}"
-                     title="${hourLabel} - ${hourCount}次胎动">
-                    ${hourLabel.substring(0, 2)}
-                    ${hourCount > 0 ? `<div style="font-size:10px;margin-top:2px;">${hourCount}</div>` : ''}
-                </div>
-                `;
+            if (dailyChart) {
+                dailyChart.data.datasets[0].data = getLast7DaysData();
+                dailyChart.update();
             }
             
-            timeGrid.innerHTML = html;
+            if (trendChart) {
+                trendChart.data.datasets[0].data = getLast14DaysData();
+                trendChart.update();
+            }
+        }
+        
+        // 获取最近7天数据
+        function getLast7DaysData() {
+            const dates = getLast7Days();
+            return dates.map(date => {
+                return movements.filter(m => m.date === date).length;
+            });
+        }
+        
+        // 获取最近14天数据
+        function getLast14DaysData() {
+            const dates = getLast14Days();
+            return dates.map(date => {
+                return movements.filter(m => m.date === date).length;
+            });
         }
         
         // 获取最近7天日期
@@ -853,7 +891,7 @@
             for (let i = 6; i >= 0; i--) {
                 const date = new Date();
                 date.setDate(date.getDate() - i);
-                dates.push(date.toISOString().split('T')[0]);
+                dates.push(formatDate(date));
             }
             return dates;
         }
@@ -875,7 +913,7 @@
             for (let i = 13; i >= 0; i--) {
                 const date = new Date();
                 date.setDate(date.getDate() - i);
-                dates.push(date.toISOString().split('T')[0]);
+                dates.push(formatDate(date));
             }
             return dates;
         }
@@ -891,10 +929,42 @@
             return dates;
         }
         
+        // 更新时间分布网格
+        function updateTimeGrid() {
+            const timeGrid = document.getElementById('timeGrid');
+            const todayStr = formatDate(new Date());
+            
+            let html = '';
+            
+            // 创建24小时网格
+            for (let hour = 0; hour < 24; hour++) {
+                const hourLabel = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                
+                // 统计今天这个小时的胎动次数
+                const hourCount = movements.filter(m => 
+                    m.date === todayStr && m.hour === hour
+                ).length;
+                
+                const isActive = hourCount > 0;
+                const intensity = Math.min(hourCount * 0.2, 0.9);
+                
+                html += `
+                <div class="time-cell ${isActive ? 'active' : ''}" 
+                     style="${isActive ? `background-color: rgba(233, 30, 99, ${0.3 + intensity})` : ''}"
+                     title="${hourLabel} - ${hourCount}次胎动">
+                    ${hourLabel.substring(0, 2)}
+                    ${hourCount > 0 ? `<div style="font-size:10px;margin-top:2px;">${hourCount}</div>` : ''}
+                </div>
+                `;
+            }
+            
+            timeGrid.innerHTML = html;
+        }
+        
         // 添加示例数据
         function addSampleData() {
             const now = new Date();
-            const today = now.toISOString().split('T')[0];
+            const todayStr = formatDate(now);
             
             // 为今天添加示例数据
             const todayTimes = ['08:15', '10:30', '12:45', '14:20', '16:10', '19:30', '21:15', '22:40'];
@@ -906,7 +976,7 @@
                 
                 const movement = {
                     id: Date.now() - (1000000 * index),
-                    date: today,
+                    date: todayStr,
                     time: time,
                     fullTime: `${time}:00`,
                     timestamp: sampleTime.getTime(),
@@ -921,7 +991,7 @@
             for (let i = 1; i <= 6; i++) {
                 const pastDate = new Date(now);
                 pastDate.setDate(pastDate.getDate() - i);
-                const pastDateStr = pastDate.toISOString().split('T')[0];
+                const pastDateStr = formatDate(pastDate);
                 
                 const count = 4 + Math.floor(Math.random() * 8);
                 for (let j = 0; j < count; j++) {
@@ -994,7 +1064,7 @@
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `胎动记录_${new Date().toISOString().split('T')[0]}.csv`);
+            link.setAttribute("download", `胎动记录_${formatDate(new Date())}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -1002,3 +1072,4 @@
     </script>
 </body>
 </html>
+        
